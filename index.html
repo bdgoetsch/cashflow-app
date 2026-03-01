@@ -8,29 +8,15 @@
   <meta name="apple-mobile-web-app-title" content="Cash Flow"/>
   <meta name="theme-color" content="#0a0e1a"/>
   <title>Cash Flow</title>
-  <style>
-    body { margin:0; padding:0; background:#0a0e1a; }
-    #root { min-height:100vh; }
-    #error { display:none; color:white; padding:20px; font-family:monospace; background:#1a0000; }
-  </style>
+  <style>body{margin:0;padding:0;background:#0a0e1a;}#error{display:none;color:white;padding:20px;font-family:monospace;}</style>
 </head>
 <body>
   <div id="error"></div>
   <div id="root"></div>
-
-  <script>
-    window.onerror = function(msg, src, line, col, err) {
-      document.getElementById('error').style.display = 'block';
-      document.getElementById('error').innerHTML = '<h3>JS Error:</h3><p>' + msg + '</p><p>Line: ' + line + '</p>';
-      document.getElementById('root').style.display = 'none';
-      return false;
-    };
-  </script>
-
+  <script>window.onerror=function(msg,src,line){document.getElementById('error').style.display='block';document.getElementById('error').innerHTML='<h3>Error:</h3><p>'+msg+'</p><p>Line: '+line+'</p>';};</script>
   <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.23.2/babel.min.js"></script>
-
   <script type="text/babel" data-type="module">
 const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
@@ -181,6 +167,20 @@ const DEFAULT_STATE = {
 
   oneOffExpenses: [
     // Standard Oil payments (fill deliveries → paid 25th of following month)
+    // AB STOCK DIVIDENDS (unvested stock, paid through payroll quarterly)
+    // $86,893 unvested × 8.5% yield = $7,385/yr gross, paid early Mar/Jun/Sep/Dec
+    // Taxed as ordinary income through payroll (~54% Mar/Jun when SS active, ~48% Sep/Dec)
+    { id:"ab_div_mar26", name:"AB Stock Dividend (Q1)", amount:850, specificDate: new Date(2026,2,5), account:"chase_in", category:"income", active:true, frequency:"once", notes:"$1,846 gross × 54% withholding → $850 net · SS active" },
+    { id:"ab_div_jun26", name:"AB Stock Dividend (Q2)", amount:850, specificDate: new Date(2026,5,5), account:"chase_in", category:"income", active:true, frequency:"once", notes:"$1,846 gross × 54% withholding → $850 net · SS active" },
+    { id:"ab_div_sep26", name:"AB Stock Dividend (Q3)", amount:964, specificDate: new Date(2026,8,5), account:"chase_in", category:"income", active:true, frequency:"once", notes:"$1,846 gross × 48% withholding → $964 net · SS maxed" },
+    { id:"ab_div_dec26", name:"AB Stock Dividend (Q4)", amount:964, specificDate: new Date(2026,11,5), account:"chase_in", category:"income", active:true, frequency:"once", notes:"$1,846 gross × 48% withholding → $964 net · SS maxed" },
+
+    // 2027 AB STOCK DIVIDENDS (unvested $126,679 × 8.5% / 4 = $2,692 gross/quarter)
+    { id:"ab_div_mar27", name:"AB Stock Dividend (Q1 2027)", amount:1238, specificDate: new Date(2027,2,5), account:"chase_in", category:"income", active:true, frequency:"once", notes:"$2,692 gross × 54% withholding · SS active" },
+    { id:"ab_div_jun27", name:"AB Stock Dividend (Q2 2027)", amount:1238, specificDate: new Date(2027,5,5), account:"chase_in", category:"income", active:true, frequency:"once", notes:"$2,692 gross × 54% withholding · SS active" },
+    { id:"ab_div_sep27", name:"AB Stock Dividend (Q3 2027)", amount:1402, specificDate: new Date(2027,8,5), account:"chase_in", category:"income", active:true, frequency:"once", notes:"$2,692 gross × 48% withholding · SS maxed" },
+    { id:"ab_div_dec27", name:"AB Stock Dividend (Q4 2027)", amount:1402, specificDate: new Date(2027,11,5), account:"chase_in", category:"income", active:true, frequency:"once", notes:"$2,692 gross × 48% withholding · SS maxed" },
+
     // 2025 TAX YEAR SETTLEMENTS
     { id:"tax_fed_2025", name:"Federal Tax Payment (2025)", amount:30000, specificDate: new Date(2026,3,15), account:"chase_out", category:"taxes", active:true, frequency:"once", notes:"2025 federal tax due · per accountant" },
     { id:"tax_ct_2025", name:"CT State Tax Payment (2025)", amount:2000, specificDate: new Date(2026,3,15), account:"chase_out", category:"taxes", active:true, frequency:"once", notes:"2025 CT state tax due · per accountant" },
@@ -474,7 +474,7 @@ function App() {
     chatEndRef.current?.scrollIntoView({ behavior:"smooth" });
   }, [state.chatHistory]);
 
-  const forecast = useMemo(() => buildForecast(state, 180), [state]);
+  const forecast = useMemo(() => buildForecast(state, 365), [state]);
 
   // Group by month for monthly view
   const monthlyGroups = useMemo(() => {
@@ -1105,6 +1105,20 @@ If the user's request is unclear, ask for clarification. Keep responses concise.
             const vestGross = abVestSchedule[year] || 0;
             brokerage += vestGross * (1 - TAX_VEST);
 
+            // AB unvested stock dividends (8.5% yield, paid quarterly through payroll)
+            // Unvested balance: starts $86,893, drops by vesting, grows by new grants
+            // New grants = 25% of gross bonus each year (added to unvested pool)
+            const abUnvestedBal = (() => {
+              let bal = 86893;
+              for (let y = 2026; y < year; y++) {
+                bal -= 86893 / 3; // existing stock vests 1/3/yr
+                bal += (grossBonuses[y] || 0) * 0.25; // new grant added
+              }
+              return Math.max(0, bal);
+            })();
+            const abDivNet = abUnvestedBal * 0.085 * (1 - 0.51); // 8.5% yield, ~51% blended tax
+            brokerage += abDivNet;
+
             const total = brokerage + retirement + college + jStock + homeEquity;
             return { year, brokerage, retirement, college, jStock, homeEquity, total,
                      benBonus: grossBonuses[year]||500000,
@@ -1273,7 +1287,6 @@ If the user's request is unclear, ask for clarification. Keep responses concise.
     </div>
   );
 }
-
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);
